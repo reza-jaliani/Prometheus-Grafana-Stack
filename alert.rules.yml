@@ -1,0 +1,78 @@
+groups:
+- name: infra-basics
+  rules:
+  - alert: PrometheusHighMemory
+    expr: process_resident_memory_bytes{job="prometheus"} > 1.5e9
+    for: 5m
+    labels:
+      severity: ticket
+    annotations:
+      summary: "Prometheus memory is high"
+      description: "Using {{ $value | humanize1024 }} for 5m"
+      
+  - alert: HostMemoryLow
+    expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 0.10
+    for: 10m
+    labels:
+      severity: warning
+      team: infra
+      env: prod
+    annotations:
+      summary: "Low memory on {{ $labels.instance }}"
+      description: "Available RAM < 10% for 10m ({{ $value | humanizePercentage }})"
+      
+  - alert: InstanceDown
+    expr: up == 0
+    for: 2m
+    labels:
+      severity: critical
+      team: infra
+      env: prod
+    annotations:
+      summary: "Instance down"
+      description: "Target {{ $labels.instance }} is unreachable for 2m"
+      
+  - alert: HostCpuHigh
+    expr: avg(rate(node_cpu_seconds_total{mode!="idle"}[5m])) by (instance) > 0.90
+    for: 10m
+    labels:
+      severity: warning
+      team: infra
+      env: prod
+    annotations:
+      summary: "High CPU on {{ $labels.instance }}"
+      description: "CPU usage > 90% for 10m"
+      
+  - alert: HostDiskAlmostFull
+    expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} 
+           / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) < 0.10
+    for: 15m
+    labels:
+      severity: critical
+      team: infra
+      env: prod
+    annotations:
+      summary: "Disk space low on {{ $labels.instance }}"
+      description: "Free space < 10% for 15m on {{ $labels.device }}"
+
+- name: prometheus-self
+  rules:
+  - alert: PrometheusTargetScrapeSlow
+    expr: histogram_quantile(0.9, sum by (job, le) (rate(scrape_duration_seconds_bucket[5m]))) > 5
+    for: 10m
+    labels:
+      severity: warning
+      team: infra
+    annotations:
+      summary: "Scrapes are slow"
+      description: "p90 scrape_duration_seconds > 5s (job={{ $labels.job }})"
+
+  - alert: PrometheusRuleEvalErrors
+    expr: increase(prometheus_rule_evaluation_failures_total[10m]) > 0
+    for: 10m
+    labels:
+      severity: warning
+      team: infra
+    annotations:
+      summary: "Rule evaluation failures"
+      description: "Some recording/alerting rules failed to evaluate"
